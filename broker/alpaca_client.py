@@ -3,6 +3,7 @@ from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
+from alpaca.data.enums import DataFeed
 from alpaca.data.timeframe import TimeFrame
 from datetime import datetime, timedelta
 import pandas as pd
@@ -31,6 +32,7 @@ class AlpacaBroker:
             timeframe=timeframe,
             start=datetime.now() - timedelta(days=days),
             end=datetime.now(),
+            feed=DataFeed.SIP if config.DATA_FEED == "sip" else DataFeed.IEX,
         )
         bars = self.data.get_stock_bars(request)
         df = bars.df
