@@ -1,0 +1,92 @@
+{
+  "name": "Tradebot News Signal",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      },
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://finance.yahoo.com/rss/headline?s={{ $json.symbol }}",
+        "options": {}
+      },
+      "name": "Fetch RSS Feed",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [460, 300],
+      "notes": "Fetches latest Yahoo Finance headlines for each symbol"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Symbols to watch — keep in sync with WATCHLIST in main.py\nconst WATCHLIST = ['AAPL', 'MSFT', 'NVDA'];\nreturn WATCHLIST.map(symbol => ({ json: { symbol } }));"
+      },
+      "name": "Build Symbol List",
+      "type": "n8n-nodes-base.code",
+      "position": [360, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse RSS XML and extract latest 5 headlines\nconst xml = $input.first().json.data;\nconst matches = [...xml.matchAll(/<title><!\\[CDATA\\[(.+?)\\]\\]><\\/title>/g)];\nconst symbol = $('Build Symbol List').first().json.symbol;\n\nreturn matches.slice(1, 6).map(m => ({\n  json: { symbol, headline: m[1].trim() }\n}));"
+      },
+      "name": "Parse Headlines",
+      "type": "n8n-nodes-base.code",
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://YOUR_PI_IP:8000/signal",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "symbol", "value": "={{ $json.symbol }}" },
+            { "name": "sentiment", "value": "={{ $json.sentiment }}" },
+            { "name": "score", "value": "={{ $json.score }}" },
+            { "name": "headline", "value": "={{ $json.headline }}" }
+          ]
+        }
+      },
+      "name": "POST to Tradebot",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1100, 300],
+      "notes": "Replace YOUR_PI_IP with your Raspberry Pi's local IP address"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simple keyword-based sentiment scoring.\n// Replace this node with an AI/LLM node for better accuracy.\nconst headline = $json.headline.toLowerCase();\nconst symbol = $json.symbol;\n\nconst bullish = ['beat', 'surges', 'record', 'growth', 'upgrade', 'buy', 'rally', 'profit', 'strong', 'outperform'];\nconst bearish = ['miss', 'drops', 'falls', 'lawsuit', 'downgrade', 'sell', 'loss', 'weak', 'cut', 'concern', 'recall', 'fine'];\n\nlet score = 0;\nbullish.forEach(w => { if (headline.includes(w)) score += 0.25; });\nbearish.forEach(w => { if (headline.includes(w)) score -= 0.25; });\nscore = Math.max(-1, Math.min(1, score));\n\nconst sentiment = score > 0.1 ? 'positive' : score < -0.1 ? 'negative' : 'neutral';\n\nreturn [{ json: { symbol, headline: $json.headline, sentiment, score } }];"
+      },
+      "name": "Score Sentiment",
+      "type": "n8n-nodes-base.code",
+      "position": [880, 300],
+      "notes": "Keyword scorer — swap for AI node (OpenAI/Claude) for better accuracy"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Math.abs($json.score) }}",
+              "operation": "largerEqual",
+              "value2": 0.6
+            }
+          ]
+        }
+      },
+      "name": "Strong Signal Only",
+      "type": "n8n-nodes-base.if",
+      "position": [980, 300],
+      "notes": "Only forward signals with |score| >= 0.6 — avoids noise"
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": { "main": [[{ "node": "Build Symbol List", "type": "main", "index": 0 }]] },
+    "Build Symbol List": { "main": [[{ "node": "Fetch RSS Feed", "type": "main", "index": 0 }]] },
+    "Fetch RSS Feed": { "main": [[{ "node": "Parse Headlines", "type": "main", "index": 0 }]] },
+    "Parse Headlines": { "main": [[{ "node": "Score Sentiment", "type": "main", "index": 0 }]] },
+    "Score Sentiment": { "main": [[{ "node": "Strong Signal Only", "type": "main", "index": 0 }]] },
+    "Strong Signal Only": { "main": [[{ "node": "POST to Tradebot", "type": "main", "index": 0 }], []] }
+  }
+}

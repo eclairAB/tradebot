@@ -162,6 +162,69 @@ Or set it up as a `systemd` service for auto-start on boot.
 
 ---
 
+## News Sentiment + n8n Integration
+
+The bot includes a local FinBERT sentiment pipeline and an n8n webhook integration for news-driven trading signals.
+
+### How it works
+
+```
+RSS feeds / n8n → score headline → POST /signal → webhook server → NewsSentimentStrategy → buy/sell
+```
+
+- **Local mode** (`ENABLE_LOCAL_NEWS_FETCH = True`): FinBERT runs on-device, fetches Yahoo Finance RSS every minute, scores headlines, and fires signals automatically. No external tools needed.
+- **n8n mode**: n8n polls news sources on a schedule, scores headlines (keyword or AI), and POSTs to the bot's webhook. More flexible — supports any news source n8n can reach.
+
+Both modes can run simultaneously.
+
+### Setting up n8n
+
+1. Install n8n on any machine (or use [n8n.cloud](https://n8n.io)):
+   ```bash
+   npx n8n
+   ```
+2. Open n8n in your browser → **Import Workflow** → select `n8n_workflow.json`
+3. In the **POST to Tradebot** node, replace `YOUR_PI_IP` with your Pi's local IP:
+   ```
+   http://192.168.x.x:8000/signal
+   ```
+4. Activate the workflow
+
+### Webhook endpoint
+
+The bot exposes a REST API on port `8000`:
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/signal` | POST | Send a trading signal |
+| `/health` | GET | Check server status + queue size |
+
+**Signal payload:**
+```json
+{
+  "symbol": "AAPL",
+  "sentiment": "positive",
+  "score": 0.85,
+  "headline": "Apple beats earnings expectations"
+}
+```
+
+Score thresholds: `>= 0.6` → BUY, `<= -0.6` → SELL, in between → ignored.
+
+### Feature flags in `main.py`
+
+```python
+ENABLE_NEWS_SENTIMENT = True    # enable webhook + signal processing
+ENABLE_LOCAL_NEWS_FETCH = True  # run FinBERT RSS fetcher on-device
+WEBHOOK_PORT = 8000
+```
+
+Set `ENABLE_LOCAL_NEWS_FETCH = False` if you only want n8n to push signals (saves memory on the Pi).
+
+> **Note:** First run with FinBERT enabled will download the model (~500MB). Subsequent runs load it from cache.
+
+---
+
 ## Disclaimer
 
 This bot is for educational purposes. Algorithmic trading involves financial risk. Always test in paper mode before using real money.
