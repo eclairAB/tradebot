@@ -1,2 +1,3 @@
 from .base_strategy import BaseStrategy
 from .moving_average_crossover import MovingAverageCrossover
+from .news_sentiment import NewsSentimentStrategy
