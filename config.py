@@ -16,6 +16,9 @@ else:
     ALPACA_BASE_URL = "https://paper-api.alpaca.markets"
     print("📄 Paper trading mode active (simulation)")
 
+# "iex" = free tier, "sip" = paid subscription (more complete data)
+DATA_FEED = os.getenv("ALPACA_DATA_FEED", "sip" if TRADING_MODE == "live" else "iex").lower()
+
 if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
     raise EnvironmentError(
         f"Missing Alpaca API keys for '{TRADING_MODE}' mode. "
